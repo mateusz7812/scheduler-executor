@@ -1,0 +1,13 @@
+﻿query GetFlowTasksForFlow($flowId: Int!){
+  flowTasksForFlow(flowId: $flowId){
+    id,
+    successorsIds,
+    environmentVariables,
+    task{
+      inputType,
+      outputType,
+      name,
+      command
+    }
+  }
+}

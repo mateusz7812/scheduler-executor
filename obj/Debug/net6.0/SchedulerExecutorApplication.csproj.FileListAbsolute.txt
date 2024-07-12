@@ -1,0 +1,6 @@
+c:\Users\admin\Documents\GitHub\Scheduler\SchedulerExecutorApplication\obj\Debug\net6.0\SchedulerExecutorApplication.csproj.AssemblyReference.cache
+c:\Users\admin\Documents\GitHub\Scheduler\SchedulerExecutorApplication\obj\Debug\net6.0\SchedulerExecutorApplication.GeneratedMSBuildEditorConfig.editorconfig
+c:\Users\admin\Documents\GitHub\Scheduler\SchedulerExecutorApplication\obj\Debug\net6.0\SchedulerExecutorApplication.AssemblyInfoInputs.cache
+c:\Users\admin\Documents\GitHub\Scheduler\SchedulerExecutorApplication\obj\Debug\net6.0\SchedulerExecutorApplication.AssemblyInfo.cs
+c:\Users\admin\Documents\GitHub\Scheduler\SchedulerExecutorApplication\obj\Debug\net6.0\SchedulerExecutorApplication.csproj.CoreCompileInputs.cache
+c:\Users\admin\Documents\GitHub\Scheduler\SchedulerExecutorApplication\obj\Debug\net6.0\SchedulerExecutorApplication.sourcelink.json

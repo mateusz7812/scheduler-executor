@@ -1,0 +1,5 @@
+﻿mutation CreateExecutorStatus($executorStatusInput: ExecutorStatusInput){
+  createStatus(executorStatusInput: $executorStatusInput){
+    id
+  }
+}

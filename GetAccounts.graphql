@@ -1,0 +1,5 @@
+﻿query GetAccounts {
+    accounts{
+        id
+    }
+}

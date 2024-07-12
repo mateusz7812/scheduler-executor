@@ -1,0 +1,7 @@
+﻿subscription OnFlowStart($topicName: String){
+  onFlowStart(topicName: $topicName){
+    id,
+    flowId,
+    executorId
+  }
+}

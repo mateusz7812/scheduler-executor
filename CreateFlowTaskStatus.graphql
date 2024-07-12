@@ -1,0 +1,5 @@
+﻿mutation CreateFlowTaskStatus($flowTaskStatusInput: FlowTaskStatusInput){
+  createFlowTaskStatus(flowTaskStatusInput: $flowTaskStatusInput){
+    id
+  }
+}
