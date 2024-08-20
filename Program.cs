@@ -1,20 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Configuration;
-using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq;
-using System.Net.Mime;
-using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using SchedulerExecutorApplication.GraphQl;
 using StrawberryShake;
+using System.Text;
 using System.Text.Json;
 
 namespace SchedulerExecutorApplication
@@ -88,7 +83,7 @@ namespace SchedulerExecutorApplication
                     SendFlowTaskStatus(FlowTaskStatusCode.Processing, "task started", flowRunId, flowTask.Id).Wait();
                     var process = new Process();
                     process.StartInfo.UseShellExecute = false;
-                    var environmentVariables = flowTask.EnvironmentVariables.RootElement.EnumerateArray().ToList();
+                    var environmentVariables = flowTask.EnvironmentVariables.Value.EnumerateArray().ToList();
                     foreach (var environmentVariable in environmentVariables)
                     {
                         process.StartInfo.EnvironmentVariables[environmentVariable.GetProperty("key").ToString()] =
@@ -112,18 +107,17 @@ namespace SchedulerExecutorApplication
         
         public async void Start() {
             
-            var currentDirectory = Directory.GetParent(Directory.GetCurrentDirectory())?.Parent?.Parent;
-            var executablePath = Path.Combine(currentDirectory!.FullName, "Program.cs");
-
+            var currentDirectory = Directory.GetCurrentDirectory();
+            var executablePath = Path.Combine(currentDirectory, "Program.cs");
             config = ConfigurationManager.OpenExeConfiguration(executablePath);
             
             var serviceCollection = new ServiceCollection();
             serviceCollection
                 .AddSchedulerServer()
                 .ConfigureHttpClient(client =>
-                    client.BaseAddress = new Uri("http://localhost:3000/graphql"))
+                    client.BaseAddress = new Uri(config.AppSettings.Settings["graphQlServerBaseAddress"].Value))
                 .ConfigureWebSocketClient(client => 
-                    client.Uri = new Uri("ws://localhost:3000/graphql"));
+                    client.Uri = new Uri(config.AppSettings.Settings["graphQlServerUri"].Value));
             IServiceProvider services = serviceCollection.BuildServiceProvider();
             _schedulerServer = services.GetRequiredService<ISchedulerServer>();
 
