@@ -19,7 +19,7 @@ namespace SchedulerExecutorApplication
         private static bool _exitSystem = false;
         private static ISchedulerServer _schedulerServer;
         private static Configuration config;
-        #region Trap application termination
+        /*#region Trap application termination
         [DllImport("Kernel32")]
         private static extern bool SetConsoleCtrlHandler(EventHandler handler, bool add);
 
@@ -43,11 +43,11 @@ namespace SchedulerExecutorApplication
             Environment.Exit(-1);
             return true;
         }
-        #endregion
+        #endregion*/
 
         static void Main(string[] args) {
-            _handler += new EventHandler(Handler);
-            SetConsoleCtrlHandler(_handler, true);
+            //_handler += new EventHandler(Handler);
+            //SetConsoleCtrlHandler(_handler, true);
 
             Program p = new Program();
             p.Start();
