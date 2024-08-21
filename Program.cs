@@ -19,6 +19,20 @@ namespace SchedulerExecutorApplication
         private static bool _exitSystem = false;
         private static ISchedulerServer _schedulerServer;
         private static Configuration config;
+
+        private static string DynamicAccountId = null;
+        private static string DynamicAccountLogin = null;
+        private static string DynamicExecutorId = null;
+        private static string DynamicExecutorName = null;
+
+        public static bool EnvironmentVariablesConfig => Environment.GetEnvironmentVariable("ENVIRONMENT_VARIABLE_CONFIG").ToLower() == "true";
+        public static string GraphQlServerBaseAddress => EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("GRAPHQL_SERVER_BASE_ADDRESS") : config.AppSettings.Settings["graphQlServerBaseAddress"].Value;
+        public static string GraphQlServerUri => EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("GRAPHQL_SERVER_URI") : config.AppSettings.Settings["graphQlServerUri"].Value;
+        public static string ExecutorId => DynamicExecutorId != null ? DynamicExecutorId : EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("EXECUTOR_ID") : config.AppSettings.Settings["executorId"].Value;
+        public static string ExecutorName => DynamicExecutorName != null ? DynamicExecutorName : EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("EXECUTOR_NAME") : config.AppSettings.Settings["executorName"].Value;
+        public static string AccountId => DynamicAccountId != null ? DynamicAccountId : EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("ACCOUNT_ID") : config.AppSettings.Settings["accountId"].Value;
+        public static string AccountLogin => DynamicAccountLogin != null ? DynamicAccountLogin : EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("ACCOUNT_LOGIN") : config.AppSettings.Settings["accountLogin"].Value;
+
         /*#region Trap application termination
         [DllImport("Kernel32")]
         private static extern bool SetConsoleCtrlHandler(EventHandler handler, bool add);
@@ -48,6 +62,10 @@ namespace SchedulerExecutorApplication
         static void Main(string[] args) {
             //_handler += new EventHandler(Handler);
             //SetConsoleCtrlHandler(_handler, true);
+
+            if(!EnvironmentVariablesConfig){
+                ReadConfig();
+            }
 
             Program p = new Program();
             p.Start();
@@ -106,24 +124,19 @@ namespace SchedulerExecutorApplication
         }
         
         public async void Start() {
-            
-            var currentDirectory = Directory.GetCurrentDirectory();
-            var executablePath = Path.Combine(currentDirectory, "Program.cs");
-            config = ConfigurationManager.OpenExeConfiguration(executablePath);
-            
             var serviceCollection = new ServiceCollection();
             serviceCollection
                 .AddSchedulerServer()
                 .ConfigureHttpClient(client =>
-                    client.BaseAddress = new Uri(config.AppSettings.Settings["graphQlServerBaseAddress"].Value))
+                    client.BaseAddress = new Uri(GraphQlServerBaseAddress))
                 .ConfigureWebSocketClient(client => 
-                    client.Uri = new Uri(config.AppSettings.Settings["graphQlServerUri"].Value));
+                    client.Uri = new Uri(GraphQlServerUri));
             IServiceProvider services = serviceCollection.BuildServiceProvider();
             _schedulerServer = services.GetRequiredService<ISchedulerServer>();
 
             if(!Configured())
                 await Configure();
-            var executorId = Convert.ToInt32(config.AppSettings.Settings["executorId"].Value);
+            var executorId = Convert.ToInt32(ExecutorId);
             await SendStatus(ExecutorStatusCode.Online);
             Console.WriteLine("Press Ctr+C to exit");
             Console.WriteLine("start working");
@@ -131,12 +144,31 @@ namespace SchedulerExecutorApplication
             _schedulerServer.OnFlowStart.Watch($"executor{executorId}").Subscribe(observer);
         }
 
+        public static void ReadConfig(){
+            var currentDirectory = Directory.GetCurrentDirectory();
+            var executablePath = Path.Combine(currentDirectory, "Program.cs");
+            Console.WriteLine($"executablePath: {executablePath}");
+            config = ConfigurationManager.OpenExeConfiguration(executablePath);
+        }
+
+        public static void SaveConfig(){
+            if(DynamicAccountId != null)
+                config.AppSettings.Settings.Add("accountId", DynamicAccountId);
+            if(DynamicAccountLogin != null)
+                config.AppSettings.Settings.Add("accountLogin", DynamicAccountLogin);
+            if(DynamicExecutorId != null)   
+                config.AppSettings.Settings.Add("executorId", DynamicExecutorId);
+            if(DynamicExecutorName != null)
+                config.AppSettings.Settings.Add("executorName", DynamicExecutorName);
+            config.Save(ConfigurationSaveMode.Minimal);
+        }
+
         private static async Task SendStatus(ExecutorStatusCode code)
         {
             var result = await _schedulerServer.CreateExecutorStatus.ExecuteAsync(new ExecutorStatusInput
             {
                 Date = DateTime.UtcNow.Ticks,
-                ExecutorId = Convert.ToInt32(config.AppSettings.Settings["executorId"].Value),
+                ExecutorId = Convert.ToInt32(ExecutorId),
                 StatusCode = code
             });
             result.EnsureNoErrors();
@@ -157,13 +189,13 @@ namespace SchedulerExecutorApplication
 
         private static bool Configured()
         {
-            return config.AppSettings.Settings.AllKeys.Contains("accountId") &&
-                   config.AppSettings.Settings.AllKeys.Contains("executorId");
+            return AccountId != null &&
+                   ExecutorId != null;
         }
         
         private static async Task Configure()
         {
-            if (!config.AppSettings.Settings.AllKeys.Contains("accountId"))
+            if (AccountId == null)
             {
                 Console.WriteLine("Account not found, before running flows you have to login");
                 IOperationResult<IGetLoginResult> result = null;
@@ -186,30 +218,32 @@ namespace SchedulerExecutorApplication
                     Console.WriteLine("User not found");
                 }
 
-                config.AppSettings.Settings.Add("accountId", result.Data.LocalLogin.Id.ToString());
-                config.AppSettings.Settings.Add("accountLogin", result.Data.LocalLogin.Login);
-                config.Save(ConfigurationSaveMode.Minimal);
+                DynamicAccountId = result.Data.LocalLogin.Id.ToString();
+                DynamicAccountLogin = result.Data.LocalLogin.Login;
             }
             
-            Console.WriteLine($"User {config.AppSettings.Settings["accountLogin"].Value} with id {config.AppSettings.Settings["accountId"].Value} logged in");
+            Console.WriteLine($"User {AccountLogin} with id {AccountId} logged in");
 
-            if (!config.AppSettings.Settings.AllKeys.Contains("executorId"))
+            if (ExecutorId == null)
             {
                 Console.WriteLine("Executor not registered");
                 Console.Write("Executor name: ");
                 var name = Console.ReadLine();
                 Console.WriteLine("Executor description: ");
                 var description = Console.ReadLine();
-                var accountId = Int32.Parse(config.AppSettings.Settings["accountId"].Value);
+                var accountId = Int32.Parse(AccountId);
                 Console.WriteLine("Registering...");
                 var executorInput = new CreateExecutorInput { AccountId = accountId, Name = name, Description = description};
                 var result = await _schedulerServer.CreateExecutor.ExecuteAsync(executorInput);
                 result.EnsureNoErrors();
-                config.AppSettings.Settings.Add("executorId", result.Data?.CreateExecutor?.Id.ToString());
-                config.AppSettings.Settings.Add("executorName", result.Data?.CreateExecutor?.Name);
-                config.Save(ConfigurationSaveMode.Minimal);
+                DynamicExecutorId = result.Data?.CreateExecutor?.Id.ToString();
+                DynamicExecutorName = result.Data?.CreateExecutor?.Name;
             }
-            Console.WriteLine($"Executor {config.AppSettings.Settings["executorName"].Value} is registered with id {config.AppSettings.Settings["executorId"].Value}");
+            Console.WriteLine($"Executor {ExecutorName} is registered with id {ExecutorId}");
+            
+            if(!EnvironmentVariablesConfig){
+                SaveConfig();
+            }
         }
 
         private static string ReadPassword()
