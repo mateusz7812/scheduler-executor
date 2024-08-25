@@ -11,11 +11,16 @@ using SchedulerExecutorApplication.GraphQl;
 using StrawberryShake;
 using System.Text;
 using System.Text.Json;
+using zipkin4net;
+using zipkin4net.Tracers.Zipkin;
+using zipkin4net.Transport.Http;
+using zipkin4net.Annotation;
 
 namespace SchedulerExecutorApplication
 {
     class Program
     {
+        private const string contentType = "application/json";
         private static bool _exitSystem = false;
         private static ISchedulerServer _schedulerServer;
         private static Configuration config;
@@ -32,6 +37,7 @@ namespace SchedulerExecutorApplication
         public static string ExecutorName => DynamicExecutorName != null ? DynamicExecutorName : EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("EXECUTOR_NAME") : config.AppSettings.Settings["executorName"].Value;
         public static string AccountId => DynamicAccountId != null ? DynamicAccountId : EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("ACCOUNT_ID") : config.AppSettings.Settings["accountId"].Value;
         public static string AccountLogin => DynamicAccountLogin != null ? DynamicAccountLogin : EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("ACCOUNT_LOGIN") : config.AppSettings.Settings["accountLogin"].Value;
+        public static string ZipkinCollectorUrl => EnvironmentVariablesConfig ? Environment.GetEnvironmentVariable("ZIPKIN_COLLECTOR_URL") : config.AppSettings.Settings["zipkinCollectorUrl"].Value;
 
         /*#region Trap application termination
         [DllImport("Kernel32")]
@@ -67,12 +73,25 @@ namespace SchedulerExecutorApplication
                 ReadConfig();
             }
 
+            var logger = new ZipkinConsoleLogger(); //It should implement ILogger
+            var sender = new HttpZipkinSender(ZipkinCollectorUrl, contentType); // It should implement IZipkinSender
+            var spanSerializer = new JSONSpanSerializer();
+
+            TraceManager.SamplingRate = 1.0f; //full tracing
+
+            var tracer = new ZipkinTracer(sender, spanSerializer);
+            TraceManager.RegisterTracer(tracer);
+            TraceManager.Start(logger);
+
             Program p = new Program();
             p.Start();
 
             while(!_exitSystem) {
                 Thread.Sleep(500);
             }
+
+            TraceManager.Stop();
+            
         }
 
         class FlowStartObserver : IObserver<IOperationResult<IOnFlowStartResult>>
@@ -89,7 +108,8 @@ namespace SchedulerExecutorApplication
 
             public void OnNext(IOperationResult<IOnFlowStartResult> value)
             {
-                Console.WriteLine($"Flow {value?.Data?.OnFlowStart?.FlowId}: start");
+                zipkin4net.Trace.Current = zipkin4net.Trace.Create();
+                LogLine($"Flow {value?.Data?.OnFlowStart?.FlowId}: start");
                 SendStatus(ExecutorStatusCode.Working).Wait();
                 var flowTasksTask = _schedulerServer.GetFlowTasksForFlow.ExecuteAsync(value!.Data.OnFlowStart.FlowId);
                 flowTasksTask.Wait();
@@ -97,7 +117,7 @@ namespace SchedulerExecutorApplication
                 var flowRunId = value.Data.OnFlowStart.Id;
                 foreach (var flowTask in result.Data.FlowTasksForFlow!)
                 {
-                    Console.WriteLine($"({flowTask.Task.Name}): start");
+                    LogLine($"({flowTask.Task.Name}): start");
                     SendFlowTaskStatus(FlowTaskStatusCode.Processing, "task started", flowRunId, flowTask.Id).Wait();
                     var process = new Process();
                     process.StartInfo.UseShellExecute = false;
@@ -112,13 +132,13 @@ namespace SchedulerExecutorApplication
                     process.StartInfo.Arguments = "\""+flowTask.Task.Command+"; exit\"";
                     process.Start();
                     string s = process.StandardOutput.ReadLine()?.ReplaceLineEndings("");
-                    Console.WriteLine($"{flowTask.Task.Name}: " + s);
+                    LogLine($"{flowTask.Task.Name}: " + s);
                     SendFlowTaskStatus(FlowTaskStatusCode.Done, s, flowRunId, flowTask.Id).Wait();
                     process.WaitForExit();
-                    Console.WriteLine($"({flowTask.Task.Name}): end");
+                    LogLine($"({flowTask.Task.Name}): end");
                     Thread.Sleep(1000);
                 }
-                Console.WriteLine($"Flow {value?.Data?.OnFlowStart?.FlowId}: end");
+                LogLine($"Flow {value?.Data?.OnFlowStart?.FlowId}: end");
                 SendStatus(ExecutorStatusCode.Online).Wait();
             }
         }
@@ -144,10 +164,14 @@ namespace SchedulerExecutorApplication
             _schedulerServer.OnFlowStart.Watch($"executor{executorId}").Subscribe(observer);
         }
 
+        public static void LogLine(String line){
+            Console.WriteLine(line);
+            zipkin4net.Trace.Current.Record(Annotations.Event(line));
+        }
+
         public static void ReadConfig(){
             var currentDirectory = Directory.GetCurrentDirectory();
             var executablePath = Path.Combine(currentDirectory, "Program.cs");
-            Console.WriteLine($"executablePath: {executablePath}");
             config = ConfigurationManager.OpenExeConfiguration(executablePath);
         }
 
@@ -222,7 +246,7 @@ namespace SchedulerExecutorApplication
                 DynamicAccountLogin = result.Data.LocalLogin.Login;
             }
             
-            Console.WriteLine($"User {AccountLogin} with id {AccountId} logged in");
+            LogLine($"User {AccountLogin} with id {AccountId} logged in");
 
             if (ExecutorId == null)
             {
@@ -239,7 +263,7 @@ namespace SchedulerExecutorApplication
                 DynamicExecutorId = result.Data?.CreateExecutor?.Id.ToString();
                 DynamicExecutorName = result.Data?.CreateExecutor?.Name;
             }
-            Console.WriteLine($"Executor {ExecutorName} is registered with id {ExecutorId}");
+            LogLine($"Executor {ExecutorName} is registered with id {ExecutorId}");
             
             if(!EnvironmentVariablesConfig){
                 SaveConfig();

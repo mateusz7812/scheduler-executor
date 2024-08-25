@@ -15,6 +15,7 @@
       <PackageReference Include="StrawberryShake.Transport.Http" Version="13.9.11" />
       <PackageReference Include="StrawberryShake.Transport.WebSockets" Version="13.9.11" />
       <PackageReference Include="System.Configuration.ConfigurationManager" Version="5.0.0" />
+      <PackageReference Include="Zipkin4net" Version="1.5.0" />
     </ItemGroup>
   
 </Project>
